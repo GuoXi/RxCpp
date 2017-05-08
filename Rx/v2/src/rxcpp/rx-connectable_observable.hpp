@@ -162,28 +162,26 @@ public:
         return cs;
     }
 
-    /// ref_count ->
-    /// takes a connectable_observable source and uses a ref_count of the subscribers
-    /// to control the connection to the published source. The first subscription
-    /// will cause a call to connect() and the last unsubscribe will unsubscribe the
-    /// connection.
-    ///
-    auto ref_count() const
-        ->      observable<T,   rxo::detail::ref_count<T, this_type>> {
-        return  observable<T,   rxo::detail::ref_count<T, this_type>>(
-                                rxo::detail::ref_count<T, this_type>(*this));
+    /*! @copydoc rx-ref_count.hpp
+     */
+    template<class... AN>
+    auto ref_count(AN... an) const
+        /// \cond SHOW_SERVICE_MEMBERS
+        -> decltype(observable_member(ref_count_tag{}, *(this_type*)nullptr, std::forward<AN>(an)...))
+        /// \endcond
+    {
+        return      observable_member(ref_count_tag{},                *this, std::forward<AN>(an)...);
     }
 
-    /// connect_forever ->
-    /// takes a connectable_observable source and calls connect during
-    /// the construction of the expression. This means that the source
-    /// starts running without any subscribers and continues running
-    /// after all subscriptions have been unsubscribed.
-    ///
-    auto connect_forever() const
-        ->      observable<T,   rxo::detail::connect_forever<T, this_type>> {
-        return  observable<T,   rxo::detail::connect_forever<T, this_type>>(
-                                rxo::detail::connect_forever<T, this_type>(*this));
+    /*! @copydoc rx-connect_forever.hpp
+     */
+    template<class... AN>
+    auto connect_forever(AN... an) const
+        /// \cond SHOW_SERVICE_MEMBERS
+        -> decltype(observable_member(connect_forever_tag{}, *(this_type*)nullptr, std::forward<AN>(an)...))
+        /// \endcond
+    {
+        return      observable_member(connect_forever_tag{},                *this, std::forward<AN>(an)...);
     }
 };
 

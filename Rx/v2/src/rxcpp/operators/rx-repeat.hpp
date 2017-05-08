@@ -8,7 +8,7 @@
 
     \tparam Count  the type of the counter (optional).
 
-    \param t  the number of times the source observable items are repeated (optional). If not specified or 0, infinitely repeats the source observable.
+    \param t The number of times the source observable items are repeated (optional). If not specified, infinitely repeats the source observable. Specifying 0 returns an empty sequence immediately
 
     \return  An observable that repeats the sequence of items emitted by the source observable for t times.
 
@@ -25,6 +25,7 @@
 #define RXCPP_OPERATORS_RX_REPEAT_HPP
 
 #include "../rx-includes.hpp"
+#include "rx-retry-repeat-common.hpp"
 
 namespace rxcpp {
 
@@ -42,89 +43,38 @@ struct repeat_invalid : public rxo::operator_base<repeat_invalid_arguments<AN...
 template<class... AN>
 using repeat_invalid_t = typename repeat_invalid<AN...>::type;
 
-template<class T, class Observable, class Count>
-struct repeat : public operator_base<T>
-{
-    typedef rxu::decay_t<Observable> source_type;
-    typedef rxu::decay_t<Count> count_type;
-    struct values
-    {
-        values(source_type s, count_type t)
-            : source(std::move(s))
-            , remaining(std::move(t))
-            , repeat_infinitely(t == 0)
-        {
-        }
-        source_type source;
-        count_type remaining;
-        bool repeat_infinitely;
-    };
-    values initial;
-
-    repeat(source_type s, count_type t)
-        : initial(std::move(s), std::move(t))
-    {
+// Contain repeat variations in a namespace
+namespace repeat {
+  struct event_handlers {
+    template <typename State>
+    static inline void on_error(State& state, std::exception_ptr& e) {
+      state->out.on_error(e);
     }
-
-    template<class Subscriber>
-    void on_subscribe(const Subscriber& s) const {
-
-        typedef Subscriber output_type;
-        struct state_type
-            : public std::enable_shared_from_this<state_type>
-            , public values
-        {
-            state_type(const values& i, const output_type& oarg)
-                : values(i)
-                , source_lifetime(composite_subscription::empty())
-                , out(oarg)
-            {
-            }
-            composite_subscription source_lifetime;
-            output_type out;
-            composite_subscription::weak_subscription lifetime_token;
-
-            void do_subscribe() {
-                auto state = this->shared_from_this();
-                
-                state->out.remove(state->lifetime_token);
-                state->source_lifetime.unsubscribe();
-
-                state->source_lifetime = composite_subscription();
-                state->lifetime_token = state->out.add(state->source_lifetime);
-
-                state->source.subscribe(
-                    state->out,
-                    state->source_lifetime,
-                // on_next
-                    [state](T t) {
-                        state->out.on_next(t);
-                    },
-                // on_error
-                    [state](std::exception_ptr e) {
-                        state->out.on_error(e);
-                    },
-                // on_completed
-                    [state]() {
-                        if (state->repeat_infinitely || (--state->remaining > 0)) {
-                            state->do_subscribe();
-                        } else {
-                            state->out.on_completed();
-                        }
-                    }
-                );
-            }
-        };
-
-        // take a copy of the values for each subscription
-        auto state = std::make_shared<state_type>(initial, s);
-
-        // start the first iteration
+          
+    template <typename State>
+    static inline void on_completed(State& state) {
+      // Functions update() and completed_predicate() vary between finite and infinte versions
+      state->update();
+      if (state->completed_predicate()) {
+        state->out.on_completed();
+      } else {
         state->do_subscribe();
+      }
     }
-};
+  };
+
+  // Finite repeat case (explicitely limited with the number of times)
+  template <class T, class Observable, class Count>
+  using finite = ::rxcpp::operators::detail::retry_repeat_common::finite
+    <event_handlers, T, Observable, Count>;
+  
+  // Infinite repeat case
+  template <class T, class Observable>
+  using infinite = ::rxcpp::operators::detail::retry_repeat_common::infinite
+    <event_handlers, T, Observable>;
 
 }
+} // detail
 
 /*! @copydoc rx-repeat.hpp
 */
@@ -137,37 +87,34 @@ auto repeat(AN&&... an)
 }
 
 template<>
-struct member_overload<repeat_tag>
-{
-    template<class Observable,
-        class Enabled = rxu::enable_if_all_true_type_t<
-            is_observable<Observable>>,
-        class SourceValue = rxu::value_type_t<Observable>,
-        class Repeat = rxo::detail::repeat<SourceValue, rxu::decay_t<Observable>, int>,
-        class Value = rxu::value_type_t<Repeat>,
-        class Result = observable<Value, Repeat>>
-    static Result member(Observable&& o) {
-        return Result(Repeat(std::forward<Observable>(o), 0));
-    }
+struct member_overload<repeat_tag> {
+  template<class Observable,
+           class Enabled = rxu::enable_if_all_true_type_t<is_observable<Observable>>,
+           class SourceValue = rxu::value_type_t<Observable>,
+           class Repeat = rxo::detail::repeat::infinite<SourceValue, rxu::decay_t<Observable>>,
+           class Value = rxu::value_type_t<Repeat>,
+           class Result = observable<Value, Repeat>>
+  static Result member(Observable&& o) {
+    return Result(Repeat(std::forward<Observable>(o)));
+  }
 
-    template<class Observable,
-        class Count,
-        class Enabled = rxu::enable_if_all_true_type_t<
-            is_observable<Observable>>,
-        class SourceValue = rxu::value_type_t<Observable>,
-        class Repeat = rxo::detail::repeat<SourceValue, rxu::decay_t<Observable>, rxu::decay_t<Count>>,
-        class Value = rxu::value_type_t<Repeat>,
-        class Result = observable<Value, Repeat>>
-    static Result member(Observable&& o, Count&& c) {
-        return Result(Repeat(std::forward<Observable>(o), std::forward<Count>(c)));
-    }
+  template<class Observable,
+           class Count,
+           class Enabled = rxu::enable_if_all_true_type_t<is_observable<Observable>>,
+           class SourceValue = rxu::value_type_t<Observable>,
+           class Repeat = rxo::detail::repeat::finite<SourceValue, rxu::decay_t<Observable>, rxu::decay_t<Count>>,
+           class Value = rxu::value_type_t<Repeat>,
+           class Result = observable<Value, Repeat>>
+  static Result member(Observable&& o, Count&& c) {
+    return Result(Repeat(std::forward<Observable>(o), std::forward<Count>(c)));
+  }
 
-    template<class... AN>
-    static operators::detail::repeat_invalid_t<AN...> member(AN...) {
-        std::terminate();
-        return {};
-        static_assert(sizeof...(AN) == 10000, "repeat takes (optional Count)");
-    }
+  template<class... AN>
+  static operators::detail::repeat_invalid_t<AN...> member(AN...) {
+    std::terminate();
+    return {};
+    static_assert(sizeof...(AN) == 10000, "repeat takes (optional Count)");
+  }
 };
 
 }

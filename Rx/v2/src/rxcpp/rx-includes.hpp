@@ -150,7 +150,6 @@
 #include <deque>
 #include <thread>
 #include <future>
-#include <vector>
 #include <list>
 #include <queue>
 #include <chrono>
@@ -191,6 +190,7 @@
 #include "operators/rx-combine_latest.hpp"
 #include "operators/rx-concat.hpp"
 #include "operators/rx-concat_map.hpp"
+#include "operators/rx-connect_forever.hpp"
 #include "operators/rx-debounce.hpp"
 #include "operators/rx-delay.hpp"
 #include "operators/rx-distinct.hpp"
@@ -203,10 +203,12 @@
 #include "operators/rx-ignore_elements.hpp"
 #include "operators/rx-map.hpp"
 #include "operators/rx-merge.hpp"
+#include "operators/rx-observe_on.hpp"
 #include "operators/rx-on_error_resume_next.hpp"
 #include "operators/rx-pairwise.hpp"
 #include "operators/rx-reduce.hpp"
 #include "operators/rx-repeat.hpp"
+#include "operators/rx-replay.hpp"
 #include "operators/rx-retry.hpp"
 #include "operators/rx-sample_time.hpp"
 #include "operators/rx-scan.hpp"
